@@ -1,0 +1,6 @@
+{
+  "name": "PrintHub Unified",
+  "description": "A unified dashboard for 3D printing enthusiasts, integrating Bambu Lab, Thingiverse, and Printables with built-in STL slicing and usage tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
