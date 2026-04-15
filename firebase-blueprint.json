@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "bio": { "type": "string" },
+        "location": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "PrinterProfile": {
+      "title": "PrinterProfile",
+      "description": "Custom printer hardware settings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "nozzleSize": { "type": "number" },
+        "bedTemp": { "type": "number" },
+        "fanSpeed": { "type": "number" }
+      },
+      "required": ["id", "userId", "name"]
+    },
+    "QueueItem": {
+      "title": "QueueItem",
+      "description": "Items in the print queue",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "time": { "type": "string" },
+        "filament": { "type": "string" },
+        "status": { "type": "string", "enum": ["queued", "printing", "completed", "failed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "name", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents"
+    },
+    "/users/{userId}/printer_profiles/{profileId}": {
+      "schema": "PrinterProfile",
+      "description": "User-specific printer profiles"
+    },
+    "/users/{userId}/print_queue/{queueId}": {
+      "schema": "QueueItem",
+      "description": "User-specific print queue items"
+    }
+  }
+}

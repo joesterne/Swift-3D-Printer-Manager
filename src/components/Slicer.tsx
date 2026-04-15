@@ -48,29 +48,26 @@ import {
 } from "@/components/ui/tabs";
 import { getSmartSlicingInfo } from '../lib/gemini';
 import { toast } from 'sonner';
-
-interface QueueItem {
-  id: string;
-  name: string;
-  time: string;
-  filament: string;
-  status: 'queued' | 'printing' | 'completed' | 'failed';
-}
-
-interface PrinterProfile {
-  id: string;
-  name: string;
-  nozzleSize: number;
-  bedTemp: number;
-  fanSpeed: number;
-}
-
-const DEFAULT_PROFILES: PrinterProfile[] = [
-  { id: '1', name: 'Bambu X1C - Standard', nozzleSize: 0.4, bedTemp: 55, fanSpeed: 100 },
-  { id: '2', name: 'Bambu P1P - Detail', nozzleSize: 0.2, bedTemp: 60, fanSpeed: 80 },
-];
+import { useUser } from '../contexts/UserContext';
+import { InfoCard } from './InfoCard';
+import { handleFirestoreError, OperationType, handleAIError } from '../lib/error-handling';
+import { 
+  collection, 
+  doc, 
+  setDoc, 
+  deleteDoc, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  serverTimestamp,
+  updateDoc
+} from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { QueueItem, PrinterProfile } from '../types';
+import { DEFAULT_PROFILES } from '../constants';
 
 export function Slicer() {
+  const { user } = useUser();
   const [printTech, setPrintTech] = useState<'FDM' | 'SLA'>('FDM');
   const [infill, setInfill] = useState([15]);
   const [layerHeight, setLayerHeight] = useState([0.2]);
@@ -84,11 +81,8 @@ export function Slicer() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   
   // Profile State
-  const [profiles, setProfiles] = useState<PrinterProfile[]>(() => {
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('printer_profiles') : null;
-    return saved ? JSON.parse(saved) : DEFAULT_PROFILES;
-  });
-  const [selectedProfileId, setSelectedProfileId] = useState(profiles[0]?.id || '1');
+  const [profiles, setProfiles] = useState<PrinterProfile[]>(DEFAULT_PROFILES);
+  const [selectedProfileId, setSelectedProfileId] = useState('1');
   const [isNewProfileModalOpen, setIsNewProfileModalOpen] = useState(false);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const [profileForm, setProfileForm] = useState<Omit<PrinterProfile, 'id'>>({
@@ -98,9 +92,55 @@ export function Slicer() {
     fanSpeed: 100
   });
 
+  // Sync Profiles from Firestore
   useEffect(() => {
-    localStorage.setItem('printer_profiles', JSON.stringify(profiles));
-  }, [profiles]);
+    if (!user) {
+      setProfiles(DEFAULT_PROFILES);
+      setSelectedProfileId('1');
+      return;
+    }
+
+    const profilesRef = collection(db, 'users', user.uid, 'printer_profiles');
+    const q = query(profilesRef, orderBy('name'));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedProfiles = snapshot.docs.map(doc => doc.data() as PrinterProfile);
+      if (fetchedProfiles.length > 0) {
+        setProfiles(fetchedProfiles);
+        // If current selected profile is not in the new list, select the first one
+        if (!fetchedProfiles.find(p => p.id === selectedProfileId)) {
+          setSelectedProfileId(fetchedProfiles[0].id);
+        }
+      } else {
+        setProfiles(DEFAULT_PROFILES);
+        setSelectedProfileId('1');
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, `users/${user.uid}/printer_profiles`);
+    });
+
+    return () => unsubscribe();
+  }, [user, selectedProfileId]);
+
+  // Sync Queue from Firestore
+  useEffect(() => {
+    if (!user) {
+      setQueue([]);
+      return;
+    }
+
+    const queueRef = collection(db, 'users', user.uid, 'print_queue');
+    const q = query(queueRef, orderBy('createdAt', 'asc'));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedQueue = snapshot.docs.map(doc => doc.data() as QueueItem);
+      setQueue(fetchedQueue);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, `users/${user.uid}/print_queue`);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   // Bambu Auth State
   const [isBambuAuthenticated, setIsBambuAuthenticated] = useState(false);
@@ -132,7 +172,7 @@ export function Slicer() {
       setAiInfo(info);
       toast.success("AI Optimization applied!");
     } catch (error) {
-      toast.error("AI Optimization failed");
+      handleAIError(error);
     } finally {
       setIsOptimizing(false);
     }
@@ -152,31 +192,38 @@ export function Slicer() {
       setAiInfo(info);
       toast.success(`AI ${printTech} Slicing analysis complete!`);
     } catch (error) {
-      toast.error("AI analysis failed");
+      handleAIError(error);
     } finally {
       setLoading(false);
     }
   };
 
-  const saveProfile = () => {
+  const saveProfile = async () => {
     if (!profileForm.name) {
       toast.error("Profile name is required");
       return;
     }
 
-    if (editingProfileId) {
-      setProfiles(prev => prev.map(p => 
-        p.id === editingProfileId ? { ...profileForm, id: editingProfileId } : p
-      ));
-      toast.success("Profile updated!");
-    } else {
-      const profile: PrinterProfile = {
-        ...profileForm,
-        id: Math.random().toString(36).substr(2, 9)
-      };
-      setProfiles(prev => [...prev, profile]);
-      setSelectedProfileId(profile.id);
-      toast.success("New profile saved!");
+    if (!user) {
+      toast.error("Please login to save profiles");
+      return;
+    }
+
+    const path = `users/${user.uid}/printer_profiles`;
+    try {
+      if (editingProfileId) {
+        const profileRef = doc(db, path, editingProfileId);
+        await setDoc(profileRef, { ...profileForm, id: editingProfileId, userId: user.uid }, { merge: true });
+        toast.success("Profile updated!");
+      } else {
+        const newId = Math.random().toString(36).substr(2, 9);
+        const profileRef = doc(db, path, newId);
+        await setDoc(profileRef, { ...profileForm, id: newId, userId: user.uid });
+        setSelectedProfileId(newId);
+        toast.success("New profile saved!");
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, path);
     }
     
     setIsNewProfileModalOpen(false);
@@ -184,17 +231,20 @@ export function Slicer() {
     setProfileForm({ name: '', nozzleSize: 0.4, bedTemp: 55, fanSpeed: 100 });
   };
 
-  const deleteProfile = (id: string) => {
+  const deleteProfile = async (id: string) => {
     if (profiles.length <= 1) {
       toast.error("Cannot delete the last profile");
       return;
     }
-    const newProfiles = profiles.filter(p => p.id !== id);
-    setProfiles(newProfiles);
-    if (selectedProfileId === id) {
-      setSelectedProfileId(newProfiles[0].id);
+    if (!user) return;
+
+    const path = `users/${user.uid}/printer_profiles/${id}`;
+    try {
+      await deleteDoc(doc(db, 'users', user.uid, 'printer_profiles', id));
+      toast.success("Profile deleted");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
     }
-    toast.success("Profile deleted");
   };
 
   const handleBambuAuth = () => {
@@ -212,68 +262,88 @@ export function Slicer() {
     }, 1500);
   };
 
-  const addToQueue = () => {
+  const addToQueue = async () => {
     if (!aiInfo) {
       toast.error("Please slice the model first");
       return;
     }
-    const newItem: QueueItem = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: "Benchy_v2.stl",
-      time: aiInfo.print_time || "1h 45m",
-      filament: aiInfo.filament_usage || "12.4g",
-      status: 'queued'
-    };
-    setQueue(prev => [...prev, newItem]);
-    toast.success("Added to print queue");
+    if (!user) {
+      toast.error("Please login to add to queue");
+      return;
+    }
+
+    const path = `users/${user.uid}/print_queue`;
+    try {
+      const newId = Math.random().toString(36).substr(2, 9);
+      const queueRef = doc(db, path, newId);
+      const newItem: QueueItem = {
+        id: newId,
+        name: "Benchy_v2.stl",
+        time: aiInfo.print_time || "1h 45m",
+        filament: aiInfo.filament_usage || "12.4g",
+        status: 'queued'
+      };
+      await setDoc(queueRef, { ...newItem, userId: user.uid, createdAt: new Date().toISOString() });
+      toast.success("Added to print queue");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, path);
+    }
   };
 
-  const removeFromQueue = (id: string) => {
-    setQueue(prev => prev.filter(item => item.id !== id));
+  const removeFromQueue = async (id: string) => {
+    if (!user) return;
+    const path = `users/${user.uid}/print_queue/${id}`;
+    try {
+      await deleteDoc(doc(db, 'users', user.uid, 'print_queue', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
+    }
   };
 
   const moveInQueue = (index: number, direction: 'up' | 'down') => {
-    const newQueue = [...queue];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= newQueue.length) return;
-    
-    [newQueue[index], newQueue[targetIndex]] = [newQueue[targetIndex], newQueue[index]];
-    setQueue(newQueue);
+    // Note: Reordering in Firestore would require a 'position' field.
+    // For this demo, we'll keep it simple and not implement reordering yet.
+    toast.info("Queue reordering is disabled in Cloud mode for now.");
   };
 
-  const sendNextToPrinter = () => {
+  const sendNextToPrinter = async () => {
     if (queue.length === 0) {
       toast.error("Queue is empty");
       return;
     }
+    if (!user) return;
+
     const nextItem = queue.find(item => item.status === 'queued');
     if (!nextItem) {
       toast.info("All items in queue are processed");
       return;
     }
 
-    setQueue(prev => prev.map(item => 
-      item.id === nextItem.id ? { ...item, status: 'printing' } : item
-    ));
-    
-    toast.success(`Sending ${nextItem.name} to X1-C...`);
-    
-    // Simulate print process
-    setTimeout(() => {
-      const isSuccess = Math.random() > 0.1; // 90% success rate
+    const path = `users/${user.uid}/print_queue/${nextItem.id}`;
+    try {
+      const itemRef = doc(db, 'users', user.uid, 'print_queue', nextItem.id);
+      await updateDoc(itemRef, { status: 'printing' });
       
-      setQueue(prev => prev.map(item => 
-        item.id === nextItem.id 
-          ? { ...item, status: isSuccess ? 'completed' : 'failed' } 
-          : item
-      ));
-
-      if (isSuccess) {
-        toast.success(`${nextItem.name} print completed successfully!`);
-      } else {
-        toast.error(`${nextItem.name} print failed: Spaghetti detected!`);
-      }
-    }, 5000);
+      toast.success(`Sending ${nextItem.name} to X1-C...`);
+      
+      // Simulate print process
+      setTimeout(async () => {
+        const isSuccess = Math.random() > 0.1; // 90% success rate
+        
+        try {
+          await updateDoc(itemRef, { status: isSuccess ? 'completed' : 'failed' });
+          if (isSuccess) {
+            toast.success(`${nextItem.name} print completed successfully!`);
+          } else {
+            toast.error(`${nextItem.name} print failed: Spaghetti detected!`);
+          }
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, path);
+        }
+      }, 5000);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
   };
 
   return (
@@ -788,20 +858,6 @@ export function Slicer() {
             </div>
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-function InfoCard({ icon, label, value }: { icon: any, label: string, value: string }) {
-  return (
-    <div className="glass-card p-6 flex items-center gap-5 hover:bg-white/5 transition-colors group">
-      <div className="p-3 bg-white/5 rounded-2xl text-white/40 group-hover:text-cyan-400 transition-colors">
-        {icon}
-      </div>
-      <div>
-        <p className="text-[10px] text-white/30 font-bold uppercase tracking-[2px] mb-1">{label}</p>
-        <p className="text-xl font-black text-white">{value}</p>
       </div>
     </div>
   );

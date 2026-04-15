@@ -16,14 +16,7 @@ import {
   Filter,
   X
 } from 'lucide-react';
-
-const LOGS = [
-  { id: 1, name: "Articulated Dragon", date: "2024-04-12", time: "12h 45m", filament: "245g", cost: "$4.50", status: "Success" },
-  { id: 2, name: "Benchy", date: "2024-04-11", time: "1h 30m", filament: "12g", cost: "$0.25", status: "Success" },
-  { id: 3, name: "Tool Holder", date: "2024-04-10", time: "4h 20m", filament: "85g", cost: "$1.60", status: "Failed" },
-  { id: 4, name: "Phone Stand", date: "2024-04-09", time: "2h 15m", filament: "35g", cost: "$0.70", status: "Success" },
-  { id: 5, name: "Cable Clip x10", date: "2024-04-08", time: "3h 00m", filament: "50g", cost: "$1.00", status: "Success" },
-];
+import { MOCK_LOGS } from '../constants';
 
 export function Tracking() {
   const [nameFilter, setNameFilter] = useState("");
@@ -31,7 +24,7 @@ export function Tracking() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  const filteredLogs = LOGS.filter(log => {
+  const filteredLogs = MOCK_LOGS.filter(log => {
     const matchesName = log.name.toLowerCase().includes(nameFilter.toLowerCase());
     const matchesStatus = statusFilter === "All" || log.status === statusFilter;
     

@@ -2,11 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, Sparkles } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
 import ReactMarkdown from 'react-markdown';
 import { toast } from "sonner";
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+import { createChatSession } from '../lib/gemini';
+import { handleAIError } from '../lib/error-handling';
 
 export function ChatAssistant() {
   const [messages, setMessages] = useState<{ role: 'user' | 'bot', content: string }[]>([
@@ -14,6 +13,11 @@ export function ChatAssistant() {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const chatRef = useRef<any>(null);
+
+  useEffect(() => {
+    chatRef.current = createChatSession();
+  }, []);
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -24,18 +28,13 @@ export function ChatAssistant() {
     setLoading(true);
 
     try {
-      const chat = ai.chats.create({
-        model: "gemini-3-flash-preview",
-        config: {
-          systemInstruction: "You are a 3D printing expert assistant. You help users with slicing settings, troubleshooting print failures, finding models, and managing their Bambu Lab printers. Be concise and technical but helpful."
-        }
-      });
-
-      const result = await chat.sendMessage({ message: userMsg });
+      if (!chatRef.current) {
+        chatRef.current = createChatSession();
+      }
+      const result = await chatRef.current.sendMessage({ message: userMsg });
       setMessages(prev => [...prev, { role: 'bot', content: result.text || "Sorry, I couldn't process that." }]);
     } catch (error) {
-      console.error(error);
-      toast.error("Failed to get response from AI");
+      handleAIError(error);
     } finally {
       setLoading(false);
     }

@@ -2,8 +2,6 @@ import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-export const genAI = ai;
-
 export async function getSmartSlicingInfo(modelName: string, geometryInfo: string) {
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
@@ -28,11 +26,17 @@ export async function getSmartSlicingInfo(modelName: string, geometryInfo: strin
 export async function searchModels(query: string) {
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
-    contents: [{ parts: [{ text: `Search for 3D printable models related to: ${query}. 
-    Provide a list of top 5 models from Thingiverse and Printables with their names, descriptions, and estimated popularity.` }] }],
-    config: {
-      tools: [{ googleSearch: {} }]
-    }
+    contents: `Search for 3D printable models related to: ${query}. 
+    Provide a list of top 5 models from Thingiverse and Printables with their names, descriptions, and estimated popularity.`,
   });
   return response.text;
+}
+
+export function createChatSession() {
+  return ai.chats.create({
+    model: "gemini-3-flash-preview",
+    config: {
+      systemInstruction: "You are a 3D printing expert assistant. You help users with slicing settings, troubleshooting print failures, finding models, and managing their Bambu Lab printers. Be concise and technical but helpful."
+    }
+  });
 }

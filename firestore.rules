@@ -1,0 +1,118 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: /users/{userId}
+    // Fields:
+    //   - uid: string (required)
+    //   - displayName: string
+    //   - email: string (required)
+    //   - photoURL: string
+    //   - createdAt: string (ISO 8601)
+    //   - bio: string
+    //   - location: string
+    //
+    // Collection: /users/{userId}/printer_profiles/{profileId}
+    // Fields:
+    //   - id: string (required)
+    //   - userId: string (required)
+    //   - name: string (required)
+    //   - nozzleSize: number
+    //   - bedTemp: number
+    //   - fanSpeed: number
+    //
+    // Collection: /users/{userId}/print_queue/{queueId}
+    // Fields:
+    //   - id: string (required)
+    //   - userId: string (required)
+    //   - name: string (required)
+    //   - time: string
+    //   - filament: string
+    //   - status: string (queued, printing, completed, failed)
+    //   - createdAt: string (ISO 8601)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100)) &&
+             (!('bio' in data) || (data.bio is string && data.bio.size() < 500)) &&
+             (!('location' in data) || (data.location is string && data.location.size() < 100));
+    }
+
+    function isValidPrinterProfile(data, userId) {
+      return data.keys().hasAll(['id', 'userId', 'name']) &&
+             data.userId == userId &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             (!('nozzleSize' in data) || data.nozzleSize is number) &&
+             (!('bedTemp' in data) || data.bedTemp is number) &&
+             (!('fanSpeed' in data) || data.fanSpeed is number);
+    }
+
+    function isValidQueueItem(data, userId) {
+      return data.keys().hasAll(['id', 'userId', 'name', 'status']) &&
+             data.userId == userId &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
+             data.status in ['queued', 'printing', 'completed', 'failed'] &&
+             (!('time' in data) || data.time is string) &&
+             (!('filament' in data) || data.filament is string) &&
+             (!('createdAt' in data) || isValidDateString(data.createdAt));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      request.resource.data.uid == resource.data.uid;
+
+      match /printer_profiles/{profileId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidPrinterProfile(request.resource.data, userId);
+        allow update: if isOwner(userId) && isValidPrinterProfile(request.resource.data, userId) &&
+                        request.resource.data.id == resource.data.id;
+        allow delete: if isOwner(userId);
+      }
+
+      match /print_queue/{queueId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidQueueItem(request.resource.data, userId);
+        allow update: if isOwner(userId) && isValidQueueItem(request.resource.data, userId) &&
+                        request.resource.data.id == resource.data.id;
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}

@@ -35,9 +35,30 @@ import { Dashboard } from './components/Dashboard';
 import { Explore } from './components/Explore';
 import { Slicer } from './components/Slicer';
 import { Tracking } from './components/Tracking';
+import { Profile } from './components/Profile';
+import { NavItem } from './components/NavItem';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { UserProvider, useUser } from './contexts/UserContext';
+import { 
+  User as UserIcon,
+  LogOut,
+  LogIn
+} from 'lucide-react';
 
-export default function App() {
+function AppContent() {
   const [activeTab, setActiveTab] = useState("dashboard");
+  const { user, profile, login, logout, loading } = useUser();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin" />
+          <p className="text-cyan-500 font-black uppercase tracking-widest text-xs">Initializing Labs...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen text-white font-sans selection:bg-cyan-500/30">
@@ -80,6 +101,12 @@ export default function App() {
                     active={activeTab === "tracking"} 
                     onClick={() => setActiveTab("tracking")} 
                   />
+                  <NavItem 
+                    icon={<UserIcon size={18} />} 
+                    label="Profile" 
+                    active={activeTab === "profile"} 
+                    onClick={() => setActiveTab("profile")} 
+                  />
                 </nav>
               </div>
 
@@ -100,21 +127,30 @@ export default function App() {
           </div>
 
           <div className="mt-auto p-6 border-t border-white/10">
-            <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                <span className="text-sm font-medium text-white/80">X1-C Printing</span>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-[10px] text-white/40 uppercase font-bold">
-                  <span>Progress</span>
-                  <span>78%</span>
+            {user ? (
+              <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  <span className="text-sm font-medium text-white/80">X1-C Printing</span>
                 </div>
-                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                  <div className="h-full bg-cyan-400 w-[78%] shadow-[0_0_10px_rgba(0,242,255,0.5)]" />
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[10px] text-white/40 uppercase font-bold">
+                    <span>Progress</span>
+                    <span>78%</span>
+                  </div>
+                  <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                    <div className="h-full bg-cyan-400 w-[78%] shadow-[0_0_10px_rgba(0,242,255,0.5)]" />
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <Button 
+                className="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-black rounded-xl"
+                onClick={login}
+              >
+                <LogIn size={18} className="mr-2" /> Login to Sync
+              </Button>
+            )}
           </div>
         </aside>
 
@@ -134,7 +170,26 @@ export default function App() {
                 <Button variant="ghost" size="icon" className="text-white/40 hover:text-white hover:bg-white/5">
                   <Settings size={20} />
                 </Button>
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border border-white/10 shadow-inner" />
+                {user ? (
+                  <button 
+                    onClick={() => setActiveTab("profile")}
+                    className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border border-white/10 shadow-inner overflow-hidden"
+                  >
+                    {profile?.photoURL ? (
+                      <img src={profile.photoURL} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <UserIcon size={20} className="m-auto text-white/40" />
+                    )}
+                  </button>
+                ) : (
+                  <Button 
+                    size="sm" 
+                    className="bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-lg"
+                    onClick={login}
+                  >
+                    Login
+                  </Button>
+                )}
               </div>
             </div>
           </header>
@@ -144,6 +199,7 @@ export default function App() {
             {activeTab === "explore" && <Explore />}
             {activeTab === "slicer" && <Slicer />}
             {activeTab === "tracking" && <Tracking />}
+            {activeTab === "profile" && <Profile />}
           </div>
         </main>
 
@@ -157,18 +213,12 @@ export default function App() {
   );
 }
 
-function NavItem({ icon, label, active, onClick }: { icon: any, label: string, active: boolean, onClick: () => void }) {
+export default function App() {
   return (
-    <button 
-      onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${
-        active 
-          ? "bg-white/10 text-white border border-white/20 shadow-lg shadow-black/10" 
-          : "text-white/40 hover:text-white/80 hover:bg-white/5"
-      }`}
-    >
-      <span className={active ? "text-cyan-400" : ""}>{icon}</span>
-      <span className="font-semibold text-sm">{label}</span>
-    </button>
+    <ErrorBoundary>
+      <UserProvider>
+        <AppContent />
+      </UserProvider>
+    </ErrorBoundary>
   );
 }
