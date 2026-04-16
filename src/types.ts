@@ -56,3 +56,16 @@ export interface PrintLog {
   cost: string;
   status: "Success" | "Failed";
 }
+
+export interface ConnectedPrinter {
+  id: string;
+  name: string;
+  model: string;
+  status: 'online' | 'offline' | 'printing' | 'ready';
+  currentPrint?: string;
+  progress?: number;
+  temperature?: {
+    nozzle: number;
+    bed: number;
+  };
+}

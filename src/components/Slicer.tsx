@@ -63,8 +63,23 @@ import {
   updateDoc
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { QueueItem, PrinterProfile } from '../types';
+import { QueueItem, PrinterProfile, ConnectedPrinter } from '../types';
 import { DEFAULT_PROFILES } from '../constants';
+
+const LayerVisualization = ({ height, max }: { height: number; max: number }) => {
+  const percentage = height / max;
+  const strokeWidth = 1.5 + percentage * 2.5;
+  
+  return (
+    <div className="p-1 bg-cyan-400/10 rounded-md">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-cyan-400 transition-all duration-300">
+        <path d="M4 19H20" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" opacity="0.2" />
+        <path d="M4 12H20" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" opacity="0.5" />
+        <path d="M4 5H20" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+};
 
 export function Slicer() {
   const { user } = useUser();
@@ -150,8 +165,46 @@ export function Slicer() {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isDeletingProfile, setIsDeletingProfile] = useState(false);
+  const [printers, setPrinters] = useState<ConnectedPrinter[]>([]);
 
   const selectedProfile = profiles.find(p => p.id === selectedProfileId) || profiles[0];
+
+  // Bambu Real-time Status Simulation
+  useEffect(() => {
+    if (!isBambuAuthenticated) {
+      setPrinters([]);
+      return;
+    }
+
+    const mockInitialPrinters: ConnectedPrinter[] = [
+      { id: 'bambu-x1c-01', name: 'Master-X1C', model: 'X1 Carbon', status: 'ready', temperature: { nozzle: 25, bed: 30 } },
+      { id: 'bambu-p1s-01', name: 'Studio-P1S', model: 'P1S', status: 'online', temperature: { nozzle: 22, bed: 22 } }
+    ];
+    setPrinters(mockInitialPrinters);
+
+    const interval = setInterval(() => {
+      setPrinters(current => current.map(p => {
+        if (p.status === 'printing') {
+          const newProgress = Math.min((p.progress || 0) + 2, 100);
+          if (newProgress >= 100) {
+            toast.success(`${p.name}: Print "${p.currentPrint}" completed!`);
+            return { ...p, status: 'ready', progress: 0, currentPrint: undefined };
+          }
+          return { 
+            ...p, 
+            progress: newProgress, 
+            temperature: { 
+              nozzle: 220 + (Math.random() * 4 - 2), 
+              bed: 60 + (Math.random() * 2 - 1) 
+            } 
+          };
+        }
+        return p;
+      }));
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [isBambuAuthenticated]);
 
   const handleSmartOptimize = async () => {
     setIsOptimizing(true);
@@ -331,23 +384,51 @@ export function Slicer() {
       return;
     }
 
+    // If Bambu is connected, check for available printer
+    let targetPrinterId: string | null = null;
+    if (isBambuAuthenticated) {
+      const availablePrinter = printers.find(p => p.status === 'ready' || p.status === 'online');
+      if (!availablePrinter) {
+        toast.error("No printers available. Wait for a print to finish.");
+        return;
+      }
+      targetPrinterId = availablePrinter.id;
+    }
+
     const path = `users/${user.uid}/print_queue/${nextItem.id}`;
     try {
       const itemRef = doc(db, 'users', user.uid, 'print_queue', nextItem.id);
       await updateDoc(itemRef, { status: 'printing' });
       
-      toast.success(`Sending ${nextItem.name} to X1-C...`);
+      const printerName = targetPrinterId 
+        ? printers.find(p => p.id === targetPrinterId)?.name 
+        : "X1-C";
       
-      // Simulate print process
+      toast.success(`Sending ${nextItem.name} to ${printerName}...`);
+      
+      if (isBambuAuthenticated && targetPrinterId) {
+        setPrinters(prev => prev.map(p => 
+          p.id === targetPrinterId 
+            ? { ...p, status: 'printing', currentPrint: nextItem.name, progress: 0 } 
+            : p
+        ));
+      }
+
+      // Simulate print process (slightly faster for demo)
       setTimeout(async () => {
-        const isSuccess = Math.random() > 0.1; // 90% success rate
+        const isSuccess = Math.random() > 0.1;
         
         try {
           await updateDoc(itemRef, { status: isSuccess ? 'completed' : 'failed' });
           if (isSuccess) {
-            toast.success(`${nextItem.name} print completed successfully!`);
+            toast.success(`${nextItem.name} finished successfully!`);
           } else {
-            toast.error(`${nextItem.name} print failed: Spaghetti detected!`);
+            toast.error(`${nextItem.name} layout error detected!`);
+            if (isBambuAuthenticated && targetPrinterId) {
+              setPrinters(prev => prev.map(p => 
+                p.id === targetPrinterId ? { ...p, status: 'ready', progress: 0 } : p
+              ));
+            }
           }
         } catch (error) {
           handleFirestoreError(error, OperationType.UPDATE, path);
@@ -467,9 +548,9 @@ export function Slicer() {
       </div>
 
       <div className="space-y-8">
-        {/* Bambu Lab Authentication */}
-        <div className={`glass-card p-6 border-2 transition-all duration-500 ${isBambuAuthenticated ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-white/5'}`}>
-          <div className="flex items-center justify-between">
+        {/* Bambu Lab Authentication & Printer Status */}
+        <div className={`glass-card p-6 border-2 transition-all duration-500 overflow-hidden ${isBambuAuthenticated ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-white/5'}`}>
+          <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-4">
               <div className={`p-3 rounded-2xl ${isBambuAuthenticated ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-white/40'}`}>
                 {isBambuAuthenticated ? <ShieldCheck size={24} /> : <User size={24} />}
@@ -503,7 +584,7 @@ export function Slicer() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-widest text-white/40">Password</label>
+                       <label className="text-xs font-bold uppercase tracking-widest text-white/40">Password</label>
                       <Input 
                         type="password" 
                         placeholder="••••••••" 
@@ -535,6 +616,62 @@ export function Slicer() {
               </Button>
             )}
           </div>
+
+          {isBambuAuthenticated && (
+            <div className="space-y-4 pt-4 border-t border-white/10 animate-in slide-in-from-top-4">
+              <h5 className="text-[10px] font-black text-white/30 uppercase tracking-[2px]">Connected Devices ({printers.length})</h5>
+              <div className="space-y-3">
+                {printers.map(printer => (
+                  <div key={printer.id} className="p-4 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${printer.status === 'printing' ? 'bg-cyan-500 text-black animate-pulse' : 'bg-white/10 text-white/40'}`}>
+                          <Cpu size={16} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-white">{printer.name}</p>
+                          <p className="text-[10px] text-white/40 font-medium">{printer.model}</p>
+                        </div>
+                      </div>
+                      <Badge className={`text-[9px] font-black uppercase ${
+                        printer.status === 'printing' ? 'bg-cyan-500 text-black' : 
+                        printer.status === 'ready' || printer.status === 'online' ? 'bg-emerald-500/20 text-emerald-400' :
+                        'bg-white/10 text-white/20'
+                      }`}>
+                        {printer.status}
+                      </Badge>
+                    </div>
+
+                    {printer.status === 'printing' && (
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-[10px] font-bold">
+                          <span className="text-white/60 truncate max-w-[120px]">{printer.currentPrint}</span>
+                          <span className="text-cyan-400">{printer.progress}%</span>
+                        </div>
+                        <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-cyan-500 transition-all duration-1000" 
+                            style={{ width: `${printer.progress}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex gap-4 pt-1">
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <Thermometer size={12} className="text-red-400" />
+                        <span className="text-[10px] text-white/60">{printer.temperature?.nozzle.toFixed(0)}°C</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <Layers size={12} className="text-emerald-400" />
+                        <span className="text-[10px] text-white/60">{printer.temperature?.bed.toFixed(0)}°C</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="glass-card p-8 space-y-8">
@@ -690,9 +827,12 @@ export function Slicer() {
               </div>
 
               <div className="space-y-4">
-                <div className="flex justify-between text-xs font-bold uppercase tracking-wider text-white/40">
-                  <span>Layer Height</span>
-                  <span className="text-cyan-400">{layerHeight[0]}mm</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <LayerVisualization height={layerHeight[0]} max={0.4} />
+                    <span className="text-xs font-bold uppercase tracking-wider text-white/40">Layer Height</span>
+                  </div>
+                  <span className="text-xs font-bold text-cyan-400">{layerHeight[0]}mm</span>
                 </div>
                 <Slider value={layerHeight} onValueChange={(val) => setLayerHeight(val as number[])} min={0.05} max={0.4} step={0.05} className="py-2" />
               </div>
@@ -708,9 +848,12 @@ export function Slicer() {
               </div>
 
               <div className="space-y-4">
-                <div className="flex justify-between text-xs font-bold uppercase tracking-wider text-white/40">
-                  <span>Layer Height</span>
-                  <span className="text-cyan-400">{layerHeightMicrons[0]}μm</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <LayerVisualization height={layerHeightMicrons[0]} max={100} />
+                    <span className="text-xs font-bold uppercase tracking-wider text-white/40">Layer Height</span>
+                  </div>
+                  <span className="text-xs font-bold text-cyan-400">{layerHeightMicrons[0]}μm</span>
                 </div>
                 <Slider value={layerHeightMicrons} onValueChange={(val) => setLayerHeightMicrons(val as number[])} min={10} max={100} step={10} className="py-2" />
               </div>
