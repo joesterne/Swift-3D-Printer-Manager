@@ -29,7 +29,7 @@ export interface FirestoreErrorInfo {
   }
 }
 
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null, customMessage?: string) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -52,7 +52,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   
   // User-friendly message
-  let message = "An unexpected database error occurred.";
+  let message = customMessage || "An unexpected database error occurred.";
   if (errInfo.error.includes("permission-denied")) {
     message = "You don't have permission to perform this action. Please ensure you are logged in.";
   } else if (errInfo.error.includes("quota-exceeded")) {

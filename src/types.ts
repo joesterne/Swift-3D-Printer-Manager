@@ -38,6 +38,7 @@ export interface Model {
   images: string[];
   description: string;
   comments: Comment[];
+  url: string;
 }
 
 export interface Comment {

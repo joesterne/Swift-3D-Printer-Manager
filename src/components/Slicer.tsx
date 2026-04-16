@@ -148,6 +148,8 @@ export function Slicer() {
   const [bambuEmail, setBambuEmail] = useState('');
   const [bambuPassword, setBambuPassword] = useState('');
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isDeletingProfile, setIsDeletingProfile] = useState(false);
 
   const selectedProfile = profiles.find(p => p.id === selectedProfileId) || profiles[0];
 
@@ -209,41 +211,51 @@ export function Slicer() {
       return;
     }
 
+    setIsSavingProfile(true);
     const path = `users/${user.uid}/printer_profiles`;
     try {
       if (editingProfileId) {
         const profileRef = doc(db, path, editingProfileId);
         await setDoc(profileRef, { ...profileForm, id: editingProfileId, userId: user.uid }, { merge: true });
-        toast.success("Profile updated!");
+        toast.success(`Profile "${profileForm.name}" updated successfully!`);
       } else {
         const newId = Math.random().toString(36).substr(2, 9);
         const profileRef = doc(db, path, newId);
         await setDoc(profileRef, { ...profileForm, id: newId, userId: user.uid });
         setSelectedProfileId(newId);
-        toast.success("New profile saved!");
+        toast.success(`New profile "${profileForm.name}" created!`);
       }
+      setIsNewProfileModalOpen(false);
+      setEditingProfileId(null);
+      setProfileForm({ name: '', nozzleSize: 0.4, bedTemp: 55, fanSpeed: 100 });
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, path);
+      const action = editingProfileId ? "updating" : "saving";
+      handleFirestoreError(error, OperationType.WRITE, path, `Failed while ${action} profile "${profileForm.name}".`);
+    } finally {
+      setIsSavingProfile(false);
     }
-    
-    setIsNewProfileModalOpen(false);
-    setEditingProfileId(null);
-    setProfileForm({ name: '', nozzleSize: 0.4, bedTemp: 55, fanSpeed: 100 });
   };
 
   const deleteProfile = async (id: string) => {
+    const profileToDelete = profiles.find(p => p.id === id);
+    if (!profileToDelete) return;
+
     if (profiles.length <= 1) {
-      toast.error("Cannot delete the last profile");
+      toast.error("Cannot delete the last profile. You must have at least one printer configuration.");
       return;
     }
+
     if (!user) return;
 
+    setIsDeletingProfile(true);
     const path = `users/${user.uid}/printer_profiles/${id}`;
     try {
       await deleteDoc(doc(db, 'users', user.uid, 'printer_profiles', id));
-      toast.success("Profile deleted");
+      toast.success(`Profile "${profileToDelete.name}" has been removed.`);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, path);
+      handleFirestoreError(error, OperationType.DELETE, path, `Could not delete profile "${profileToDelete.name}".`);
+    } finally {
+      setIsDeletingProfile(false);
     }
   };
 
@@ -572,8 +584,9 @@ export function Slicer() {
                 variant="outline" 
                 className="w-8 h-8 rounded-lg bg-white/5 border-white/10 text-white/40 hover:text-red-400"
                 onClick={() => deleteProfile(selectedProfileId)}
+                disabled={isDeletingProfile}
               >
-                <Trash2 size={14} />
+                <Trash2 size={14} className={isDeletingProfile ? "animate-spin" : ""} />
               </Button>
               
               <Dialog open={isNewProfileModalOpen} onOpenChange={(open) => {
@@ -638,8 +651,22 @@ export function Slicer() {
                     </div>
                   </div>
                   <DialogFooter>
-                    <Button className="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-black" onClick={saveProfile}>
-                      <Save size={18} className="mr-2" /> {editingProfileId ? 'Update Profile' : 'Save Profile'}
+                    <Button 
+                      className="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-black" 
+                      onClick={saveProfile}
+                      disabled={isSavingProfile}
+                    >
+                      {isSavingProfile ? (
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                          Saving...
+                        </div>
+                      ) : (
+                        <>
+                          <Save size={18} className="mr-2" /> 
+                          {editingProfileId ? 'Update Profile' : 'Save Profile'}
+                        </>
+                      )}
                     </Button>
                   </DialogFooter>
                 </DialogContent>

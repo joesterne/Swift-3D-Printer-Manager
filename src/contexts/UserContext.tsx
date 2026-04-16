@@ -1,18 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { 
-  onAuthStateChanged, 
-  User as FirebaseUser 
-} from 'firebase/auth';
-import { 
-  doc, 
-  getDoc, 
-  setDoc, 
-  onSnapshot 
-} from 'firebase/firestore';
-import { auth, db, googleProvider, signInWithPopup, signOut } from '../lib/firebase';
-import { toast } from 'sonner';
+import { User as FirebaseUser } from 'firebase/auth';
 import { UserProfile } from '../types';
-import { handleFirestoreError, OperationType, handleAuthError } from '../lib/error-handling';
+import { authService } from '../services/authService';
+import { userService } from '../services/userService';
 
 interface UserContextType {
   user: FirebaseUser | null;
@@ -31,79 +21,54 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribe = authService.onAuthStateChanged(async (firebaseUser) => {
       setUser(firebaseUser);
       
       if (firebaseUser) {
-        // Sync profile from Firestore
-        const userDocRef = doc(db, 'users', firebaseUser.uid);
+        // Use services for profile management
+        const existingProfile = await userService.getUserProfile(firebaseUser.uid);
         
-        try {
-          // Initial fetch
-          const userDoc = await getDoc(userDocRef);
-          if (!userDoc.exists()) {
-            const newProfile: UserProfile = {
-              uid: firebaseUser.uid,
-              displayName: firebaseUser.displayName,
-              email: firebaseUser.email,
-              photoURL: firebaseUser.photoURL,
-              createdAt: new Date().toISOString()
-            };
-            await setDoc(userDocRef, newProfile);
-            setProfile(newProfile);
-          } else {
-            setProfile(userDoc.data() as UserProfile);
-          }
-        } catch (error) {
-          handleFirestoreError(error, OperationType.GET, 'users');
+        if (!existingProfile) {
+          const newProfile: UserProfile = {
+            uid: firebaseUser.uid,
+            displayName: firebaseUser.displayName,
+            email: firebaseUser.email,
+            photoURL: firebaseUser.photoURL,
+            createdAt: new Date().toISOString()
+          };
+          await userService.createUserProfile(newProfile);
+          setProfile(newProfile);
+        } else {
+          setProfile(existingProfile);
         }
 
         // Real-time listener
-        const unsubProfile = onSnapshot(userDocRef, (doc) => {
-          if (doc.exists()) {
-            setProfile(doc.data() as UserProfile);
-          }
-        }, (error) => {
-          handleFirestoreError(error, OperationType.GET, 'users');
+        const unsubProfile = userService.subscribeToProfile(firebaseUser.uid, (data) => {
+          setProfile(data);
         });
 
+        setLoading(false);
         return () => unsubProfile();
       } else {
         setProfile(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
   const login = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-      toast.success("Successfully logged in!");
-    } catch (error) {
-      handleAuthError(error);
-    }
+    await authService.login();
   };
 
   const logout = async () => {
-    try {
-      await signOut(auth);
-      toast.success("Logged out");
-    } catch (error) {
-      handleAuthError(error);
-    }
+    await authService.logout();
   };
 
   const updateProfile = async (data: Partial<UserProfile>) => {
     if (!user) return;
-    try {
-      const userDocRef = doc(db, 'users', user.uid);
-      await setDoc(userDocRef, data, { merge: true });
-      toast.success("Profile updated!");
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'users');
-    }
+    await userService.updateUserProfile(user.uid, data);
   };
 
   return (

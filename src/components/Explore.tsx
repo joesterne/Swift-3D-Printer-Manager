@@ -136,7 +136,11 @@ export function Explore() {
                   className="rounded-full w-12 h-12 bg-white text-black hover:bg-cyan-400"
                   onClick={(e) => {
                     e.stopPropagation();
-                    toast.success("Download started!");
+                    const downloadUrl = model.source === 'Thingiverse' 
+                      ? `${model.url}/zip` 
+                      : `${model.url}/files`;
+                    window.open(downloadUrl, "_blank");
+                    toast.success("Download shortcut opened!");
                   }}
                 >
                   <Download size={20} />
@@ -147,7 +151,7 @@ export function Explore() {
                   className="rounded-full w-12 h-12 bg-white text-black hover:bg-cyan-400"
                   onClick={(e) => {
                     e.stopPropagation();
-                    window.open("#", "_blank");
+                    window.open(model.url, "_blank");
                   }}
                 >
                   <ExternalLink size={20} />
@@ -268,12 +272,24 @@ export function Explore() {
                   </div>
                 </div>
 
-                <div className="mt-auto pt-6 flex gap-3">
-                  <Button className="flex-1 bg-cyan-500 hover:bg-cyan-400 text-black font-black h-12 rounded-xl shadow-lg shadow-cyan-500/20">
+                <div className="mt-auto pt-6 flex flex-col gap-3">
+                  <Button 
+                    className="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-black h-12 rounded-xl shadow-lg shadow-cyan-500/20"
+                    onClick={() => {
+                      const downloadUrl = selectedModel.source === 'Thingiverse' 
+                        ? `${selectedModel.url}/zip` 
+                        : `${selectedModel.url}/files`;
+                      window.open(downloadUrl, "_blank");
+                    }}
+                  >
                     <Download size={18} className="mr-2" /> Download STL
                   </Button>
-                  <Button variant="outline" className="w-12 h-12 p-0 bg-white/5 border-white/10 text-white hover:bg-white/10 rounded-xl">
-                    <ExternalLink size={18} />
+                  <Button 
+                    variant="outline" 
+                    className="w-full h-12 bg-white/5 border-white/10 text-white hover:bg-white/10 rounded-xl font-bold"
+                    onClick={() => window.open(selectedModel.url, "_blank")}
+                  >
+                    <ExternalLink size={18} className="mr-2" /> View on {selectedModel.source}
                   </Button>
                 </div>
               </div>

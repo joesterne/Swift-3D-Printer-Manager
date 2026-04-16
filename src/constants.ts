@@ -18,7 +18,8 @@ export const MOCK_MODELS: Model[] = [
     comments: [
       { user: "PrintMaster", text: "Amazing model! Printed perfectly on my X1-C.", date: "2 days ago" },
       { user: "MakerGirl", text: "The joints are so smooth. I used dual-color silk PLA.", date: "1 week ago" }
-    ]
+    ],
+    url: "https://www.printables.com/model/123456-articulated-dragon"
   },
   { 
     id: 2, 
@@ -37,7 +38,8 @@ export const MOCK_MODELS: Model[] = [
     comments: [
       { user: "BenchyFan", text: "Classic. Every printer needs one.", date: "3 days ago" },
       { user: "NewbieMaker", text: "My first print! Came out great.", date: "5 days ago" }
-    ]
+    ],
+    url: "https://www.thingiverse.com/thing:763622"
   },
   { 
     id: 3, 
@@ -54,7 +56,8 @@ export const MOCK_MODELS: Model[] = [
     description: "A simple, effective cable clip that requires no tools for installation. Great for cable management behind desks.",
     comments: [
       { user: "OrganizedLife", text: "Finally, my cables are tidy.", date: "1 day ago" }
-    ]
+    ],
+    url: "https://www.printables.com/model/234567-tool-less-cable-clip"
   },
   { 
     id: 4, 
@@ -72,7 +75,8 @@ export const MOCK_MODELS: Model[] = [
     description: "A modular drawer system that can be expanded as needed. Perfect for organizing small parts, screws, and electronics.",
     comments: [
       { user: "WorkshopKing", text: "Built a whole wall of these. Love the modularity.", date: "4 days ago" }
-    ]
+    ],
+    url: "https://www.printables.com/model/345678-modular-drawer-system"
   },
   { 
     id: 5, 
@@ -84,7 +88,8 @@ export const MOCK_MODELS: Model[] = [
     image: "https://picsum.photos/seed/fox/800/600",
     images: ["https://picsum.photos/seed/fox/800/600"],
     description: "A beautiful low poly fox model. Prints great without supports and looks amazing in any color.",
-    comments: []
+    comments: [],
+    url: "https://www.thingiverse.com/thing:456789"
   },
   { 
     id: 6, 
@@ -96,7 +101,8 @@ export const MOCK_MODELS: Model[] = [
     image: "https://picsum.photos/seed/box/800/600",
     images: ["https://picsum.photos/seed/box/800/600"],
     description: "A very popular rugged box that can be customized to any size. Features a seal for water resistance.",
-    comments: []
+    comments: [],
+    url: "https://www.printables.com/model/567890-parametric-rugged-box"
   },
 ];
 
