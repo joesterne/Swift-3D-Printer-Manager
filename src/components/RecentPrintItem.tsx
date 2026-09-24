@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Badge } from "@/components/ui/badge";
 import { Box, AlertCircle } from 'lucide-react';
 
@@ -10,7 +10,7 @@ interface RecentPrintItemProps {
   error?: boolean;
 }
 
-export function RecentPrintItem({ name, status, time, progress, error }: RecentPrintItemProps) {
+export const RecentPrintItem = memo(function RecentPrintItem({ name, status, time, progress, error }: RecentPrintItemProps) {
   return (
     <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors group">
       <div className="flex items-center gap-4">
@@ -32,4 +32,5 @@ export function RecentPrintItem({ name, status, time, progress, error }: RecentP
       </div>
     </div>
   );
-}
+});
+

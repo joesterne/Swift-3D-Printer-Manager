@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -66,7 +66,7 @@ import { db } from '../lib/firebase';
 import { QueueItem, PrinterProfile, ConnectedPrinter } from '../types';
 import { DEFAULT_PROFILES } from '../constants';
 
-const LayerVisualization = ({ height, max }: { height: number; max: number }) => {
+const LayerVisualization = memo(function LayerVisualization({ height, max }: { height: number; max: number }) {
   const percentage = height / max;
   const strokeWidth = 1.5 + percentage * 2.5;
   
@@ -79,7 +79,7 @@ const LayerVisualization = ({ height, max }: { height: number; max: number }) =>
       </svg>
     </div>
   );
-};
+});
 
 export function Slicer() {
   const { user } = useUser();
@@ -167,7 +167,10 @@ export function Slicer() {
   const [isDeletingProfile, setIsDeletingProfile] = useState(false);
   const [printers, setPrinters] = useState<ConnectedPrinter[]>([]);
 
-  const selectedProfile = profiles.find(p => p.id === selectedProfileId) || profiles[0];
+  const selectedProfile = useMemo(
+    () => profiles.find(p => p.id === selectedProfileId) || profiles[0],
+    [profiles, selectedProfileId]
+  );
 
   // Bambu Real-time Status Simulation
   useEffect(() => {
@@ -183,24 +186,29 @@ export function Slicer() {
     setPrinters(mockInitialPrinters);
 
     const interval = setInterval(() => {
-      setPrinters(current => current.map(p => {
-        if (p.status === 'printing') {
-          const newProgress = Math.min((p.progress || 0) + 2, 100);
-          if (newProgress >= 100) {
-            toast.success(`${p.name}: Print "${p.currentPrint}" completed!`);
-            return { ...p, status: 'ready', progress: 0, currentPrint: undefined };
+      setPrinters(current => {
+        const hasPrinting = current.some(p => p.status === 'printing');
+        if (!hasPrinting) return current;
+
+        return current.map(p => {
+          if (p.status === 'printing') {
+            const newProgress = Math.min((p.progress || 0) + 2, 100);
+            if (newProgress >= 100) {
+              toast.success(`${p.name}: Print "${p.currentPrint}" completed!`);
+              return { ...p, status: 'ready', progress: 0, currentPrint: undefined };
+            }
+            return { 
+              ...p, 
+              progress: newProgress, 
+              temperature: { 
+                nozzle: 220 + (Math.random() * 4 - 2), 
+                bed: 60 + (Math.random() * 2 - 1) 
+              } 
+            };
           }
-          return { 
-            ...p, 
-            progress: newProgress, 
-            temperature: { 
-              nozzle: 220 + (Math.random() * 4 - 2), 
-              bed: 60 + (Math.random() * 2 - 1) 
-            } 
-          };
-        }
-        return p;
-      }));
+          return p;
+        });
+      });
     }, 4000);
 
     return () => clearInterval(interval);

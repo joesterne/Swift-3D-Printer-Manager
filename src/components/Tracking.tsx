@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,11 @@ import {
   Clock, 
   DollarSign, 
   Trash2, 
-  ExternalLink,
-  Calendar,
-  Search,
-  Filter,
-  X
+  ExternalLink, 
+  Calendar, 
+  Search, 
+  Filter, 
+  X 
 } from 'lucide-react';
 import { MOCK_LOGS } from '../constants';
 
@@ -24,18 +24,26 @@ export function Tracking() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  const filteredLogs = MOCK_LOGS.filter(log => {
-    const matchesName = log.name.toLowerCase().includes(nameFilter.toLowerCase());
-    const matchesStatus = statusFilter === "All" || log.status === statusFilter;
-    
-    const logDate = new Date(log.date);
-    const start = startDate ? new Date(startDate) : null;
-    const end = endDate ? new Date(endDate) : null;
-    
-    const matchesDate = (!start || logDate >= start) && (!end || logDate <= end);
-    
-    return matchesName && matchesStatus && matchesDate;
-  });
+  const filteredLogs = useMemo(() => {
+    const start = startDate ? new Date(startDate).getTime() : null;
+    const end = endDate ? new Date(endDate).getTime() : null;
+    const lowerName = nameFilter.trim().toLowerCase();
+
+    return MOCK_LOGS.filter(log => {
+      if (lowerName && !log.name.toLowerCase().includes(lowerName)) {
+        return false;
+      }
+      if (statusFilter !== "All" && log.status !== statusFilter) {
+        return false;
+      }
+      if (start || end) {
+        const logTime = new Date(log.date).getTime();
+        if (start && logTime < start) return false;
+        if (end && logTime > end) return false;
+      }
+      return true;
+    });
+  }, [nameFilter, statusFilter, startDate, endDate]);
 
   const clearFilters = () => {
     setNameFilter("");

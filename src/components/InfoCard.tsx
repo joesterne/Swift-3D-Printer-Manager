@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 
 interface InfoCardProps {
   icon: React.ReactNode;
@@ -7,7 +7,7 @@ interface InfoCardProps {
   size?: 'xl' | '2xl';
 }
 
-export function InfoCard({ icon, label, value, size = 'xl' }: InfoCardProps) {
+export const InfoCard = memo(function InfoCard({ icon, label, value, size = 'xl' }: InfoCardProps) {
   return (
     <div className="glass-card p-6 flex items-center gap-5 hover:bg-white/5 transition-colors group">
       <div className="p-3 bg-white/5 rounded-2xl text-white/40 group-hover:text-cyan-400 transition-colors">
@@ -19,4 +19,5 @@ export function InfoCard({ icon, label, value, size = 'xl' }: InfoCardProps) {
       </div>
     </div>
   );
-}
+});
+

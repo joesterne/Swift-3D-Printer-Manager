@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 
 interface NavItemProps {
   icon: React.ReactNode;
@@ -7,7 +7,7 @@ interface NavItemProps {
   onClick: () => void;
 }
 
-export function NavItem({ icon, label, active, onClick }: NavItemProps) {
+export const NavItem = memo(function NavItem({ icon, label, active, onClick }: NavItemProps) {
   return (
     <button 
       onClick={onClick}
@@ -21,4 +21,5 @@ export function NavItem({ icon, label, active, onClick }: NavItemProps) {
       <span className="font-semibold text-sm">{label}</span>
     </button>
   );
-}
+});
+

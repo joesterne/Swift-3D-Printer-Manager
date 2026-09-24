@@ -1,15 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useState, Suspense, lazy } from 'react';
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
 import { Toaster } from "@/components/ui/sonner";
-import { toast } from "sonner";
 import { 
   LayoutDashboard, 
   Search, 
@@ -17,33 +10,20 @@ import {
   History, 
   Settings, 
   Printer, 
-  Box, 
-  Clock, 
-  Zap,
-  Download,
-  MessageSquare,
-  ChevronRight,
-  Plus,
-  Trash2,
-  Play,
-  Pause,
-  AlertCircle
+  User as UserIcon,
+  LogIn
 } from 'lucide-react';
-import { STLViewer } from './components/STLViewer';
-import { ChatAssistant } from './components/ChatAssistant';
 import { Dashboard } from './components/Dashboard';
-import { Explore } from './components/Explore';
-import { Slicer } from './components/Slicer';
-import { Tracking } from './components/Tracking';
-import { Profile } from './components/Profile';
+import { ChatAssistant } from './components/ChatAssistant';
 import { NavItem } from './components/NavItem';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { UserProvider, useUser } from './contexts/UserContext';
-import { 
-  User as UserIcon,
-  LogOut,
-  LogIn
-} from 'lucide-react';
+
+// Code split heavy modules so initial page load is lightning fast
+const Explore = lazy(() => import('./components/Explore').then(m => ({ default: m.Explore })));
+const Slicer = lazy(() => import('./components/Slicer').then(m => ({ default: m.Slicer })));
+const Tracking = lazy(() => import('./components/Tracking').then(m => ({ default: m.Tracking })));
+const Profile = lazy(() => import('./components/Profile').then(m => ({ default: m.Profile })));
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -195,11 +175,18 @@ function AppContent() {
           </header>
 
           <div className="flex-1 overflow-y-auto p-10 custom-scrollbar">
-            {activeTab === "dashboard" && <Dashboard />}
-            {activeTab === "explore" && <Explore />}
-            {activeTab === "slicer" && <Slicer />}
-            {activeTab === "tracking" && <Tracking />}
-            {activeTab === "profile" && <Profile />}
+            <Suspense fallback={
+              <div className="h-96 flex flex-col items-center justify-center gap-3">
+                <div className="w-10 h-10 border-2 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin" />
+                <p className="text-white/40 text-xs font-mono tracking-wider">Loading module...</p>
+              </div>
+            }>
+              {activeTab === "dashboard" && <Dashboard onNavigateToTracking={() => setActiveTab("tracking")} />}
+              {activeTab === "explore" && <Explore />}
+              {activeTab === "slicer" && <Slicer />}
+              {activeTab === "tracking" && <Tracking />}
+              {activeTab === "profile" && <Profile />}
+            </Suspense>
           </div>
         </main>
 

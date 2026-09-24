@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,13 @@ import { Model } from '../types';
 import { MOCK_MODELS } from '../constants';
 import { handleAIError } from '../lib/error-handling';
 
+function parseCount(count: string) {
+  const num = parseFloat(count);
+  if (count.toLowerCase().includes('m')) return num * 1000000;
+  if (count.toLowerCase().includes('k')) return num * 1000;
+  return num || 0;
+}
+
 export function Explore() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -38,27 +45,28 @@ export function Explore() {
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
-  const parseCount = (count: string) => {
-    const num = parseFloat(count);
-    if (count.toLowerCase().includes('m')) return num * 1000000;
-    if (count.toLowerCase().includes('k')) return num * 1000;
-    return num;
-  };
-
-  const sortedResults = [...results].sort((a, b) => {
-    if (sortBy === "likes") {
-      return parseCount(b.likes) - parseCount(a.likes);
+  const displayResults = useMemo(() => {
+    let list = results;
+    const q = query.trim().toLowerCase();
+    if (q) {
+      list = list.filter(model => 
+        model.name.toLowerCase().includes(q) ||
+        model.author.toLowerCase().includes(q)
+      );
     }
-    if (sortBy === "downloads") {
-      return parseCount(b.downloads) - parseCount(a.downloads);
-    }
-    return 0;
-  });
 
-  const displayResults = sortedResults.filter(model => 
-    model.name.toLowerCase().includes(query.toLowerCase()) ||
-    model.author.toLowerCase().includes(query.toLowerCase())
-  );
+    if (sortBy === "none") return list;
+
+    return [...list].sort((a, b) => {
+      if (sortBy === "likes") {
+        return parseCount(b.likes) - parseCount(a.likes);
+      }
+      if (sortBy === "downloads") {
+        return parseCount(b.downloads) - parseCount(a.downloads);
+      }
+      return 0;
+    });
+  }, [results, query, sortBy]);
 
   const handleSearch = async () => {
     if (!query.trim()) return;
