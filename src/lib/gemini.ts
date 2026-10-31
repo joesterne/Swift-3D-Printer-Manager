@@ -1,5 +1,9 @@
 import { GoogleGenAI } from "@google/genai";
 
+// SERVER-ONLY module: the API key must never reach the browser. The client
+// calls these through the /api/ai endpoints (see src/lib/aiClient.ts); this
+// file used to be imported by client code with the key inlined into the
+// bundle by vite.config's define.
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 export async function getSmartSlicingInfo(modelName: string, geometryInfo: string) {
@@ -32,11 +36,19 @@ export async function searchModels(query: string) {
   return response.text;
 }
 
-export function createChatSession() {
-  return ai.chats.create({
+// Stateless chat: the client keeps the transcript and sends it with each
+// message (the previous design held a stateful chats.create() session in
+// the browser — inseparable from the client-side API key).
+export async function chatReply(history: { role: 'user' | 'model'; text: string }[], message: string) {
+  const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
+    contents: [
+      ...history.map(h => ({ role: h.role, parts: [{ text: h.text }] })),
+      { role: 'user', parts: [{ text: message }] },
+    ],
     config: {
       systemInstruction: "You are a 3D printing expert assistant. You help users with slicing settings, troubleshooting print failures, finding models, and managing their Bambu Lab printers. Be concise and technical but helpful."
     }
   });
+  return response.text;
 }

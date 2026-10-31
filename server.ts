@@ -3,6 +3,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
+import { getSmartSlicingInfo, searchModels, chatReply } from "./src/lib/gemini";
 
 dotenv.config();
 
@@ -11,7 +12,7 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json());
 
@@ -20,21 +21,42 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
-  // Proxy for Thingiverse (Example)
-  app.get("/api/thingiverse/search", async (req, res) => {
-    const { q } = req.query;
-    const token = process.env.THINGIVERSE_TOKEN;
-    if (!token) {
-      return res.status(500).json({ error: "Thingiverse token not configured" });
-    }
+  // AI endpoints — the Gemini key lives only on the server. The browser used
+  // to import src/lib/gemini directly while vite.config inlined the key into
+  // the client bundle, so every visitor could extract and abuse it. The
+  // client now calls these via src/lib/aiClient.ts.
+  app.post("/api/ai/slicing", async (req, res) => {
     try {
-      const response = await fetch(`https://api.thingiverse.com/search/${q}?access_token=${token}`);
-      const data = await response.json();
-      res.json(data);
+      res.json(await getSmartSlicingInfo(req.body.modelName, req.body.geometryInfo));
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch from Thingiverse" });
+      console.error("AI slicing failed:", error);
+      res.status(500).json({ error: "AI slicing failed" });
     }
   });
+
+  app.post("/api/ai/search", async (req, res) => {
+    try {
+      res.json({ text: await searchModels(req.body.query) });
+    } catch (error) {
+      console.error("AI search failed:", error);
+      res.status(500).json({ error: "AI search failed" });
+    }
+  });
+
+  app.post("/api/ai/chat", async (req, res) => {
+    try {
+      const history = Array.isArray(req.body.history) ? req.body.history : [];
+      res.json({ text: await chatReply(history, req.body.message) });
+    } catch (error) {
+      console.error("AI chat failed:", error);
+      res.status(500).json({ error: "AI chat failed" });
+    }
+  });
+
+  // The old /api/thingiverse/search proxy was removed: no client code called
+  // it, it interpolated the query into the upstream URL unencoded, and as an
+  // unauthenticated endpoint it let anyone who could reach this server spend
+  // the owner's THINGIVERSE_TOKEN.
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

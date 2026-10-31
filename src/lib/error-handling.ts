@@ -60,7 +60,12 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   }
 
   toast.error(message);
-  throw new Error(JSON.stringify(errInfo));
+  // Log-and-toast ONLY — this used to also throw, which broke every caller:
+  // it turned onSnapshot error callbacks and catch blocks into unhandled
+  // rejections, made userService's fallbacks (return null) unreachable, and
+  // could strand UserContext before setLoading(false), leaving the app on
+  // the loading spinner forever. Callers that must react rethrow themselves
+  // (userService's create/update do).
 }
 
 export function handleAuthError(error: unknown) {

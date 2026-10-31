@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
@@ -8,7 +7,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { STLViewer } from './STLViewer';
 import { 
-  Scissors, 
   Layers, 
   Box, 
   Clock, 
@@ -19,8 +17,6 @@ import {
   Download,
   List,
   Trash2,
-  ArrowUp,
-  ArrowDown,
   Send,
   Plus,
   Cpu,
@@ -46,7 +42,7 @@ import {
   TabsList, 
   TabsTrigger 
 } from "@/components/ui/tabs";
-import { getSmartSlicingInfo } from '../lib/gemini';
+import { getSmartSlicingInfo } from '../lib/aiClient';
 import { toast } from 'sonner';
 import { useUser } from '../contexts/UserContext';
 import { InfoCard } from './InfoCard';
@@ -58,8 +54,7 @@ import {
   deleteDoc, 
   onSnapshot, 
   query, 
-  orderBy, 
-  serverTimestamp,
+  orderBy,
   updateDoc
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -92,6 +87,7 @@ export function Slicer() {
   const [supports, setSupports] = useState(false);
   const [brim, setBrim] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [aiInfo, setAiInfo] = useState<any>(null);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   
@@ -106,6 +102,13 @@ export function Slicer() {
     bedTemp: 55,
     fanSpeed: 100
   });
+
+  // The profiles listener used to also depend on selectedProfileId, so
+  // every selection change tore it down and recreated it — and its own
+  // snapshot handler calls setSelectedProfileId, re-triggering itself. The
+  // handler now reads the current selection from a ref.
+  const selectedProfileIdRef = React.useRef(selectedProfileId);
+  selectedProfileIdRef.current = selectedProfileId;
 
   // Sync Profiles from Firestore
   useEffect(() => {
@@ -123,7 +126,7 @@ export function Slicer() {
       if (fetchedProfiles.length > 0) {
         setProfiles(fetchedProfiles);
         // If current selected profile is not in the new list, select the first one
-        if (!fetchedProfiles.find(p => p.id === selectedProfileId)) {
+        if (!fetchedProfiles.find(p => p.id === selectedProfileIdRef.current)) {
           setSelectedProfileId(fetchedProfiles[0].id);
         }
       } else {
@@ -135,7 +138,7 @@ export function Slicer() {
     });
 
     return () => unsubscribe();
-  }, [user, selectedProfileId]);
+  }, [user]);
 
   // Sync Queue from Firestore
   useEffect(() => {
@@ -161,7 +164,6 @@ export function Slicer() {
   const [isBambuAuthenticated, setIsBambuAuthenticated] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [bambuEmail, setBambuEmail] = useState('');
-  const [bambuPassword, setBambuPassword] = useState('');
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isDeletingProfile, setIsDeletingProfile] = useState(false);
@@ -280,7 +282,7 @@ export function Slicer() {
         await setDoc(profileRef, { ...profileForm, id: editingProfileId, userId: user.uid }, { merge: true });
         toast.success(`Profile "${profileForm.name}" updated successfully!`);
       } else {
-        const newId = Math.random().toString(36).substr(2, 9);
+        const newId = crypto.randomUUID();
         const profileRef = doc(db, path, newId);
         await setDoc(profileRef, { ...profileForm, id: newId, userId: user.uid });
         setSelectedProfileId(newId);
@@ -321,17 +323,22 @@ export function Slicer() {
   };
 
   const handleBambuAuth = () => {
-    if (!bambuEmail || !bambuPassword) {
-      toast.error("Please enter credentials");
+    // DEMO ONLY: there is no real Bambu Lab integration behind this — the
+    // old flow accepted ANY email/password (including wrong ones) after a
+    // setTimeout and announced "Successfully connected to Bambu Lab Cloud".
+    // It now labels itself a simulation, uses its own loading state (it used
+    // to share `loading` with the Slice/Optimize buttons, blocking both),
+    // and does not collect a password at all.
+    if (!bambuEmail) {
+      toast.error("Please enter an email for the demo connection");
       return;
     }
-    setLoading(true);
-    // Simulate API call
+    setIsAuthenticating(true);
     setTimeout(() => {
       setIsBambuAuthenticated(true);
       setIsAuthModalOpen(false);
-      setLoading(false);
-      toast.success("Successfully connected to Bambu Lab Cloud");
+      setIsAuthenticating(false);
+      toast.success("Demo connection simulated — no real Bambu Lab account is linked");
     }, 1500);
   };
 
@@ -347,7 +354,7 @@ export function Slicer() {
 
     const path = `users/${user.uid}/print_queue`;
     try {
-      const newId = Math.random().toString(36).substr(2, 9);
+      const newId = crypto.randomUUID();
       const queueRef = doc(db, path, newId);
       const newItem: QueueItem = {
         id: newId,
@@ -373,11 +380,10 @@ export function Slicer() {
     }
   };
 
-  const moveInQueue = (index: number, direction: 'up' | 'down') => {
-    // Note: Reordering in Firestore would require a 'position' field.
-    // For this demo, we'll keep it simple and not implement reordering yet.
-    toast.info("Queue reordering is disabled in Cloud mode for now.");
-  };
+  // Queue reorder arrows were removed: they called a handler that only
+  // toasted "reordering is disabled" — the data model has no position field,
+  // so the controls could never work. Re-add with a position field if
+  // reordering is ever implemented.
 
   const sendNextToPrinter = async () => {
     if (queue.length === 0) {
@@ -516,22 +522,6 @@ export function Slicer() {
                     </div>
                     
                     <div className="flex items-center gap-2">
-                      <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button 
-                          onClick={() => moveInQueue(index, 'up')}
-                          disabled={index === 0}
-                          className="p-1 text-white/20 hover:text-white disabled:opacity-0"
-                        >
-                          <ArrowUp size={14} />
-                        </button>
-                        <button 
-                          onClick={() => moveInQueue(index, 'down')}
-                          disabled={index === queue.length - 1}
-                          className="p-1 text-white/20 hover:text-white disabled:opacity-0"
-                        >
-                          <ArrowDown size={14} />
-                        </button>
-                      </div>
                       <Badge className={`text-[9px] font-bold uppercase ${
                         item.status === 'printing' ? 'bg-cyan-500 text-black' : 
                         item.status === 'completed' ? 'bg-emerald-500/20 text-emerald-400' : 
@@ -566,7 +556,7 @@ export function Slicer() {
               <div>
                 <h4 className="font-bold text-white">Bambu Lab Cloud</h4>
                 <p className="text-xs text-white/40 font-medium">
-                  {isBambuAuthenticated ? `Connected as ${bambuEmail}` : 'Connect to sync printers & files'}
+                  {isBambuAuthenticated ? `Demo connection as ${bambuEmail} (simulated)` : 'Connect to sync printers & files'}
                 </p>
               </div>
             </div>
@@ -577,38 +567,28 @@ export function Slicer() {
                 </DialogTrigger>
                 <DialogContent className="glass-card border-white/10 text-white">
                   <DialogHeader>
-                    <DialogTitle className="text-2xl font-black uppercase tracking-tight">Bambu Lab Login</DialogTitle>
-                    <DialogDescription className="text-white/40">Enter your Bambu Lab credentials to sync your devices.</DialogDescription>
+                    <DialogTitle className="text-2xl font-black uppercase tracking-tight">Bambu Lab Login — Demo</DialogTitle>
+                    <DialogDescription className="text-white/40">Demo simulation only: this does not contact Bambu Lab or link a real account, and no password is collected.</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4 py-4">
                     <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-widest text-white/40">Email Address</label>
-                      <Input 
-                        type="email" 
-                        placeholder="email@example.com" 
+                      <label className="text-xs font-bold uppercase tracking-widest text-white/40">Email Address (demo label)</label>
+                      <Input
+                        type="email"
+                        placeholder="email@example.com"
                         className="bg-white/5 border-white/10 focus:ring-cyan-500"
                         value={bambuEmail}
                         onChange={(e) => setBambuEmail(e.target.value)}
                       />
                     </div>
-                    <div className="space-y-2">
-                       <label className="text-xs font-bold uppercase tracking-widest text-white/40">Password</label>
-                      <Input 
-                        type="password" 
-                        placeholder="••••••••" 
-                        className="bg-white/5 border-white/10 focus:ring-cyan-500"
-                        value={bambuPassword}
-                        onChange={(e) => setBambuPassword(e.target.value)}
-                      />
-                    </div>
                   </div>
                   <DialogFooter>
-                    <Button 
+                    <Button
                       className="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-black"
                       onClick={handleBambuAuth}
-                      disabled={loading}
+                      disabled={isAuthenticating}
                     >
-                      {loading ? 'Authenticating...' : 'Login to Cloud'}
+                      {isAuthenticating ? 'Simulating...' : 'Simulate Connection'}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
@@ -771,7 +751,7 @@ export function Slicer() {
                           step="0.1"
                           className="bg-white/5 border-white/10"
                           value={profileForm.nozzleSize}
-                          onChange={(e) => setProfileForm({...profileForm, nozzleSize: parseFloat(e.target.value)})}
+                          onChange={(e) => setProfileForm({...profileForm, nozzleSize: parseFloat(e.target.value) || 0})}
                         />
                       </div>
                       <div className="space-y-2">
@@ -780,7 +760,7 @@ export function Slicer() {
                           type="number" 
                           className="bg-white/5 border-white/10"
                           value={profileForm.bedTemp}
-                          onChange={(e) => setProfileForm({...profileForm, bedTemp: parseInt(e.target.value)})}
+                          onChange={(e) => setProfileForm({...profileForm, bedTemp: parseInt(e.target.value) || 0})}
                         />
                       </div>
                     </div>
@@ -791,7 +771,7 @@ export function Slicer() {
                         max="100"
                         className="bg-white/5 border-white/10"
                         value={profileForm.fanSpeed}
-                        onChange={(e) => setProfileForm({...profileForm, fanSpeed: parseInt(e.target.value)})}
+                        onChange={(e) => setProfileForm({...profileForm, fanSpeed: parseInt(e.target.value) || 0})}
                       />
                     </div>
                   </div>

@@ -3,8 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { toast } from "sonner";
-import { createChatSession } from '../lib/gemini';
+import { createChatSession } from '../lib/aiClient';
 import { handleAIError } from '../lib/error-handling';
 
 export function ChatAssistant() {

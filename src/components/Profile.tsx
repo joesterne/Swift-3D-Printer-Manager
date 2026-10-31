@@ -81,10 +81,23 @@ export function Profile() {
             </p>
 
             <div className="flex gap-3 pt-4">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="bg-white/5 border-white/10 text-white hover:bg-white/10 rounded-xl"
-                onClick={() => setIsEditing(!isEditing)}
+                onClick={() => {
+                  // Re-seed the form from the CURRENT profile when entering
+                  // edit mode: formData was initialized once at mount, when
+                  // profile was often still null, so Edit showed blanks and
+                  // Save wrote those blanks over the stored profile.
+                  if (!isEditing && profile) {
+                    setFormData({
+                      displayName: profile.displayName || '',
+                      bio: profile.bio || '',
+                      location: profile.location || ''
+                    });
+                  }
+                  setIsEditing(!isEditing);
+                }}
               >
                 {isEditing ? 'Cancel' : 'Edit Profile'}
               </Button>

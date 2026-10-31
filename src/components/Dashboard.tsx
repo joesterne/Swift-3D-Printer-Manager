@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Printer, Box, Clock, Zap, AlertCircle, ChevronRight, CheckCircle2, XCircle, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { 
   AreaChart, 
@@ -20,6 +19,7 @@ import {
 import { RecentPrintItem } from './RecentPrintItem';
 import { MOCK_LOGS } from '../constants';
 import { PrintLog, QueueItem } from '../types';
+import { queueItemToLog } from '../lib/printLogs';
 import { useUser } from '../contexts/UserContext';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, query } from 'firebase/firestore';
@@ -57,15 +57,7 @@ export function Dashboard({ onNavigateToTracking }: DashboardProps) {
       const liveLogs: PrintLog[] = snapshot.docs
         .map(doc => doc.data() as QueueItem)
         .filter(item => item.status === 'completed' || item.status === 'failed')
-        .map((item, idx) => ({
-          id: 1000 + idx,
-          name: item.name,
-          date: item.createdAt ? item.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
-          time: item.time || '1h 00m',
-          filament: item.filament || '20g',
-          cost: '$0.50',
-          status: item.status === 'completed' ? 'Success' : 'Failed'
-        }));
+        .map((item, idx) => queueItemToLog(item, 1000 + idx));
       setUserQueueLogs(liveLogs);
     }, () => {
       // Graceful fallback to default mock logs
@@ -74,10 +66,13 @@ export function Dashboard({ onNavigateToTracking }: DashboardProps) {
     return () => unsubscribe();
   }, [user]);
 
-  // Combine baseline mock history data with live user print queue history
+  // Signed in: the user's real queue history ONLY. Signed out: the mock
+  // logs as a demo. The two used to be merged, so the success rate, counts,
+  // and "Total Recorded" presented as the user's own included fabricated
+  // entries.
   const combinedHistory = useMemo(() => {
-    return [...userQueueLogs, ...MOCK_LOGS];
-  }, [userQueueLogs]);
+    return user ? userQueueLogs : MOCK_LOGS;
+  }, [user, userQueueLogs]);
 
   // Compute success and failure counts from history data
   const { successfulCount, failedCount, totalCount, successRate, summaryChartData } = useMemo(() => {

@@ -27,7 +27,7 @@ const Profile = lazy(() => import('./components/Profile').then(m => ({ default: 
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState("dashboard");
-  const { user, profile, login, logout, loading } = useUser();
+  const { user, profile, login, loading } = useUser();
 
   if (loading) {
     return (
